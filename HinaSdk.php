@@ -1,0 +1,882 @@
+<?php
+
+define('HINA_SDK_VERSION', '2.0.3');
+
+class HinaSdkException extends \Exception
+{
+}
+
+// 在发送的数据格式有误时，SDK会抛出此异常，用户应当捕获并处理。
+class HinaSdkIllegalDataException extends HinaSdkException
+{
+}
+
+// 在因为网络或者不可预知的问题导致数据无法发送时，SDK会抛出此异常，用户应当捕获并处理。
+class HinaSdkNetworkException extends HinaSdkException
+{
+}
+
+// 当且仅当DEBUG模式中，任何网络错误、数据异常等都会抛出此异常，用户可不捕获，用于测试SDK接入正确性
+class HinaSdkDebugException extends \Exception
+{
+}
+
+
+class HinaSdk
+{
+
+    private $_consumer;
+    private $_super_properties;
+    private $_is_win;
+
+    /*
+     * 为兼容旧版，实现构造函数重载
+     */
+    public function __construct()
+    {
+        $a = func_get_args(); //获取构造函数中的参数
+        $i = count($a);
+        if (method_exists($this, $f = '__construct' . $i)) {
+            call_user_func_array(array($this, $f), $a);
+        }
+    }
+
+
+
+
+    /**
+     * 初始化一个 HinaSdk 的实例用于数据发送。
+     *
+     * @param AbstractConsumer $consumer
+     */
+    public function __construct1($consumer)
+    {
+        $this->_is_win = false;
+        // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
+        if (strtoupper(substr(PHP_OS, 0, 3)) == "WIN") {
+            $this->_is_win = true;
+        }
+        $this->_consumer = $consumer;
+        $this->clearSuperProperties();
+    }
+
+    private function _assert_key_with_regex($key)
+    {
+        $name_pattern = "/^((?!^account_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$|^user_group|^user_tag)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
+        if (!preg_match($name_pattern, $key)) {
+            throw new HinaSdkIllegalDataException("key must be a valid variable key. [key='{$key}']");
+        }
+    }
+
+
+    private function _assert_key($type, $key)
+    {
+        if ($key == null || strlen($key) == 0) {
+            throw new HinaSdkIllegalDataException(sprintf("the %s key is empty or null.", $type));
+        }
+        $this->_assert_key_with_regex($key);
+    }
+
+
+    private function _assert_value($type, $value)
+    {
+        if ($value == null || strlen($value) == 0) {
+            throw new HinaSdkIllegalDataException(sprintf("the %s value is empty or null.", $type));
+        }
+        if (strlen($value) > 255) {
+            throw new HinaSdkIllegalDataException(sprintf("the %s value %s is too long, max length is 255.", $type, $value));
+        }
+    }
+
+    private function _assert_properties($properties = array())
+    {
+        $name_pattern = "/^((?!^account_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
+
+        if (!$properties) {
+            return;
+        }
+
+        foreach ($properties as $key => $value) {
+            if (!is_string($key)) {
+                throw new HinaSdkIllegalDataException("property key must be a str. [key=$key]");
+            }
+            if (strlen($key) > 255) {
+                throw new HinaSdkIllegalDataException("the max length of property key is 256. [key=$key]");
+            }
+
+            if (!preg_match($name_pattern, $key)) {
+                throw new HinaSdkIllegalDataException("property key must be a valid variable name. [key='$key']]");
+            }
+
+            // 只支持简单类型或数组或DateTime类
+            if (!is_scalar($value) && !is_array($value)) {
+                throw new HinaSdkIllegalDataException("property value must be a str/int/float/list. [key='$key']");
+            }
+
+            if (is_string($value) && strlen($value) > 5120) {
+                throw new HinaSdkIllegalDataException("the max length of property value is 5120. [key=$key]");
+            }
+
+            // 如果是数组，只支持 Value 是字符串格式的简单非关联数组
+            if (is_array($value)) {
+                if (array_values($value) !== $value) {
+                    throw new HinaSdkIllegalDataException("[list] property must not be associative. [key='$key']");
+                }
+
+                foreach ($value as $lvalue) {
+                    if (!is_string($lvalue)) {
+                        throw new HinaSdkIllegalDataException("[list] property's value must be a str. [value='$lvalue']");
+                    }
+                }
+            }
+        }
+    }
+
+
+    private function _normalize_data($data)
+    {
+        // 检查 account_id
+        if(isset($data['account_id'])){
+            if ( strlen($data['account_id']) > 255) {
+                throw new HinaSdkIllegalDataException("the max length of [account_id] is 255");
+            }
+            $data['account_id'] = strval($data['account_id']);
+        }
+
+        // 检查 anonymous_id
+        if(isset($data['anonymous_id'])){
+            if ( strlen($data['anonymous_id']) > 255) {
+                throw new HinaSdkIllegalDataException("the max length of [anonymous_id] is 255");
+            }
+            $data['anonymous_id'] = strval($data['anonymous_id']);
+        }
+
+
+
+
+
+        // 检查time
+        // 检查并规范化 time 字段
+        if (!is_numeric($data['time'])) {
+            throw new HinaSdkIllegalDataException("property [time] must be a numeric value");
+        }
+        $ts = (int) $data['time'];
+        $ts_num = strlen((string)$ts); // 获取时间戳的长度
+        // 检查时间戳是否为10位或13位
+        if ($ts_num == 10) {
+            $ts *= 1000; // 如果是10位（秒级），转换为13位（毫秒级）
+        } elseif ($ts_num !== 13) {
+            throw new HinaSdkIllegalDataException("property [time] must be a 10 or 13 digit timestamp");
+        }
+        $data['time'] = $ts;
+
+
+        // 检查 Event Name
+        if (isset($data['event'])) {
+            $this->_assert_key_with_regex($data['event']);
+        }
+
+        // 检查 properties
+        if (isset($data['properties']) && is_array($data['properties'])) {
+            $this->_assert_properties($data['properties']);
+
+            // XXX: 解决 PHP 中空 array() 转换成 JSON [] 的问题
+            if (count($data['properties']) == 0) {
+                $data['properties'] = new \ArrayObject();
+            }
+        } else {
+            throw new HinaSdkIllegalDataException("property must be an array.");
+        }
+
+
+
+        return $data;
+    }
+
+
+    /**
+     * 如果用户传入了 $time 字段，则不使用当前时间。
+     *
+     * @param array $properties
+     * @return int/string
+     */
+    private function _extract_user_time(&$properties = array())
+    {
+        if (array_key_exists('$time', $properties)) {
+            $time = $properties['$time'];
+            unset($properties['$time']);
+            return $time;
+        }
+        if ($this->_is_win) { // windows return string
+            return substr((microtime(true) * 1000), 0, 13);
+        } else {
+            return (int) (microtime(true) * 1000);
+        }
+    }
+
+    
+
+    /**
+     * 序列化 JSON
+     *
+     * @param $data
+     * @return string
+     */
+    private function _json_dumps($data)
+    {
+        return json_encode($data);
+    }
+
+    /**
+     * 设置 _track_id 的值，如 properties 包含 $track_id 且符合格式，则使用传入的值。
+     *
+     * @param array $data 事件的日志。
+     * @return int
+     */
+    private function _set_track_id($data)
+    {
+        
+        $data['_track_id'] = $this->generateId();
+        return $data;
+    }
+
+    /**
+     * 生成ID的方法，使用UUID和随机数的方式
+     *
+     * @return string
+     */
+    private function generateId()
+    {
+        // 生成UUID
+        $uuid = bin2hex(random_bytes(16));
+        // 去掉中间的横线
+        $cleanUuid = str_replace('-', '', $uuid);
+        // 生成4位随机数
+        $fourDigitNumber = rand(1000, 9999);
+        // 返回拼接结果
+        return $cleanUuid . $fourDigitNumber;
+    }
+
+
+
+    /**
+     * 跟踪一个用户的行为。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param string $event_name 事件名称。
+     * @param array $properties 事件的属性。
+     * @return bool
+     */
+    public function track($account_id, $is_login_id, $event_name, $properties = array())
+    {
+        try {
+            if (!is_string($event_name)) {
+                throw new HinaSdkIllegalDataException("event name must be a str.");
+            }
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            if ($properties) {
+                $all_properties = array_merge($this->_super_properties, $properties);
+            } else {
+                $all_properties = array_merge($this->_super_properties, array());
+            }
+            if($is_login_id){
+                $aid=$account_id;
+                $oid=null;
+            }else{
+                $aid=null;
+                $oid=$account_id;
+            }
+            return $this->_track_event('track', $event_name, $aid, $oid, $all_properties);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 
+     *
+     * @param string $account_id 用户注册之后的唯一标识。
+     * @param string $original_id 用户注册前的唯一标识。
+     * @param array $properties 事件的属性。
+     * @return bool
+     * @throws HinaSdkIllegalDataException
+     */
+    public function bindId($account_id, $original_id, $properties = array())
+    {
+        try {
+            if ($properties) {
+                $all_properties = array_merge($this->_super_properties, $properties);
+            } else {
+                $all_properties = array_merge($this->_super_properties, array());
+            }
+            // 检查 original_id
+            if (!$original_id or strlen($original_id) == 0) {
+                throw new HinaSdkIllegalDataException("property [original_id] must not be empty");
+            }
+            if (strlen($original_id) > 255) {
+                throw new HinaSdkIllegalDataException("the max length of [original_id] is 255");
+            }
+            return $this->_track_event('track_signup', 'H_SignUp', $account_id,  $original_id, $all_properties);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 直接设置一个用户的 Profile，如果已存在则覆盖。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param array $profiles
+     * @return bool
+     */
+    public function userSet($account_id, $is_login_id, $profiles = array())
+    {
+        try {
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            return $this->_track_event('user_set', null, $account_id,  null, $profiles);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 直接设置一个用户的 Profile，如果某个 Profile 已存在则不设置。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param array $profiles
+     * @return bool
+     */
+    public function userSetOnce($account_id, $is_login_id, $profiles = array())
+    {
+        try {
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            return $this->_track_event('user_SetOnce', null, $account_id,  null, $profiles);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 增减/减少一个用户的某一个或者多个数值类型的 Profile。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param array $profiles
+     * @return bool
+     */
+    public function userAdd($account_id, $is_login_id, $profiles = array())
+    {
+        try {
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            return $this->_track_event('user_add', null, $account_id,  null, $profiles);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 追加一个用户的某一个或者多个集合类型的 Profile。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param array $profiles
+     * @return bool
+     */
+    public function user_append($account_id, $is_login_id, $profiles = array())
+    {
+        try {
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            return $this->_track_event('user_append', null, $account_id, null, $profiles);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+    /**
+     * 删除一个用户的一个或者多个 Profile。
+     *
+     * @param string $account_id 用户的唯一标识。
+     * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
+     * @param array $profile_keys
+     * @return bool
+     */
+    public function userUnset($account_id, $is_login_id, $profile_keys = array())
+    {
+        try {
+            if (!is_bool($is_login_id)) {
+                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+            }
+            if ($profile_keys != null && array_key_exists(0, $profile_keys)) {
+                $new_profile_keys = array();
+                foreach ($profile_keys as $key) {
+                    $new_profile_keys[$key] = true;
+                }
+                $profile_keys = $new_profile_keys;
+            }
+            return $this->_track_event('user_unset', null, $account_id,  null, $profile_keys);
+        } catch (Exception $e) {
+            echo '<br>' . $e . '<br>';
+        }
+    }
+
+
+
+
+
+    /**
+     * 设置每个事件都带有的一些公共属性
+     *
+     * @param array $super_properties
+     */
+    public function registerSuperProperties(array $super_properties)
+    {
+        $this->_super_properties = array_merge($this->_super_properties, $super_properties);
+    }
+
+    /**
+     * 删除所有已设置的事件公共属性
+     */
+    public function  clearSuperProperties()
+    {
+        $this->_super_properties = array(
+            'H_lib' => 'php',
+            'H_lib_version' => HINA_SDK_VERSION,
+            'H_timezone_offset' => '-480'
+        );
+    }
+
+    /**
+     * 对于不立即发送数据的 Consumer，调用此接口应当立即进行已有数据的发送。
+     *
+     */
+    public function flush()
+    {
+        return $this->_consumer->flush();
+    }
+
+    /**
+     * 在进程结束或者数据发送完成时，应当调用此接口，以保证所有数据被发送完毕。
+     * 如果发生意外，此方法将抛出异常。
+     */
+    public function close()
+    {
+        return $this->_consumer->close();
+    }
+
+    /**
+     * @param string $update_type
+     * @param string $event_name
+     * @param string $account_id
+     * @param string $original_id
+     * @param array $properties
+     * @return bool
+     * @internal param array $profiles
+     */
+    public function _track_event($update_type, $event_name, $account_id,  $original_id, $properties)
+    {
+        $event_time = $this->_extract_user_time($properties);
+
+
+        // 设置lib_version
+        $properties['H_lib'] = 'php';
+        $properties['H_lib_version'] = HINA_SDK_VERSION;
+        $properties['H_timezone_offset'] = '-480';
+
+
+        $data = array(
+            'type' => $update_type,
+            'properties' => $properties,
+            'time' => $event_time,
+            'account_id' => $account_id,
+            "event"=>$event_name,
+            "anonymous_id" => $original_id,
+            "send_time"=>round(microtime(true) * 1000),
+        );
+
+        $data = $this->_set_track_id($data);
+        $data = $this->_normalize_data($data);
+        return $this->_consumer->send($this->_json_dumps($data));
+    }
+
+
+    
+
+}
+
+
+
+abstract class AbstractConsumer
+{
+
+    /**
+     * 发送一条消息。
+     *
+     * @param string $msg 发送的消息体
+     * @return bool
+     */
+    public abstract function send($msg);
+
+    /**
+     * 立即发送所有未发出的数据。
+     *
+     * @return bool
+     */
+    public function flush()
+    {
+    }
+
+    /**
+     * 关闭 Consumer 并释放资源。
+     *
+     * @return bool
+     */
+    public function close()
+    {
+    }
+}
+
+
+class FileConsumer extends AbstractConsumer
+{
+
+    private $file_handler;
+
+    public function __construct($filename)
+    {
+        $this->file_handler = fopen($filename, 'a+');
+    }
+
+    public function send($msg)
+    {
+        if ($this->file_handler === null) {
+            return false;
+        }
+        return fwrite($this->file_handler, $msg . "\n") === false ? false : true;
+    }
+
+    public function close()
+    {
+        if ($this->file_handler === null) {
+            return false;
+        }
+        return fclose($this->file_handler);
+    }
+}
+
+class DebugConsumer extends AbstractConsumer
+{
+
+    private $_debug_url_prefix;
+    private $_request_timeout;
+    private $_debug_write_data;
+
+    /**
+     * DebugConsumer constructor,用于调试模式.
+     * 
+     * 
+     * @param string $url_prefix 服务器的URL地址
+     * @param bool $write_data 是否把发送的数据真正写入
+     * @param int $request_timeout 请求服务器的超时时间,单位毫秒.
+     * @throws HinaSdkDebugException
+     */
+    public function __construct($url_prefix, $write_data = True, $request_timeout = 1000)
+    {
+        $parsed_url = parse_url($url_prefix);
+        if ($parsed_url === false) {
+            throw new HinaSdkDebugException("Invalid server url of Sensors Analytics.");
+        }
+
+        // 将 URI Path 替换成 Debug 模式的 '/debug'
+        $parsed_url['path'] = '/debug';
+
+        $this->_debug_url_prefix = ((isset($parsed_url['scheme'])) ? $parsed_url['scheme'] . '://' : '')
+            . ((isset($parsed_url['user'])) ? $parsed_url['user'] . ((isset($parsed_url['pass'])) ? ':' . $parsed_url['pass'] : '') . '@' : '')
+            . ((isset($parsed_url['host'])) ? $parsed_url['host'] : '')
+            . ((isset($parsed_url['port'])) ? ':' . $parsed_url['port'] : '')
+            . ((isset($parsed_url['path'])) ? $parsed_url['path'] : '')
+            . ((isset($parsed_url['query'])) ? '?' . $parsed_url['query'] : '')
+            . ((isset($parsed_url['fragment'])) ? '#' . $parsed_url['fragment'] : '')
+        ;
+
+        $this->_request_timeout = $request_timeout;
+        $this->_debug_write_data = $write_data;
+
+    }
+
+    public function send($msg)
+    {
+        $buffers = array();
+        $buffers[] = $msg;
+        $response = $this->_do_request(array(
+            "data" => $this->_encode_msg_list($buffers),
+            "gzip" => 1
+        ));
+        printf("\n=========================================================================\n");
+        if ($response['ret_code'] === 200) {
+            printf("valid message: %s\n", $msg);
+        } else {
+            printf("invalid message: %s\n", $msg);
+            printf("ret_code: %d\n", $response['ret_code']);
+            printf("ret_content: %s\n", $response['ret_content']);
+        }
+
+        if ($response['ret_code'] >= 300) {
+            throw new HinaSdkDebugException("Unexpected response from HinaSdk.");
+        }
+    }
+
+    /**
+     * 发送数据包给远程服务器。
+     *
+     * @param array $data
+     * @return array
+     * @throws HinaSdkDebugException
+     */
+    protected function _do_request($data)
+    {
+        $params = array();
+        foreach ($data as $key => $value) {
+            $params[] = $key . '=' . ($value);
+        }
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_URL, $this->_debug_url_prefix);
+        if ($this->_debug_write_data === false) {
+            // 这个参数为 false, 说明只需要校验,不需要真正写入
+            print ("\ntry Dry-Run\n");
+            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                "Dry-Run:true"
+            ));
+
+
+        }
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, $this->_request_timeout);
+        curl_setopt($ch, CURLOPT_TIMEOUT_MS, $this->_request_timeout);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, implode('&', $params));
+        curl_setopt($ch, CURLOPT_USERAGENT, "PHP SDK");
+
+        //judge https
+        $pos = strpos($this->_debug_url_prefix, "https");
+        if ($pos === 0) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        }
+
+        $http_response_header = curl_exec($ch);
+        if (!$http_response_header) {
+            throw new HinaSdkDebugException(
+                "Failed to connect to HinaSdk. [error='" . curl_error($ch) . "']"
+            );
+        }
+
+        $result = array(
+            "ret_content" => $http_response_header,
+            "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE)
+        );
+        curl_close($ch);
+        return $result;
+    }
+
+    /**
+     * 对待发送的数据进行编码
+     *
+     * @param array $msg_list
+     * @return string
+     */
+    private function _encode_msg_list($msg_list)
+    {
+        return base64_encode($this->_gzip_string("[" . implode(",", $msg_list) . "]"));
+    }
+
+    /**
+     * GZIP 压缩一个字符串
+     *
+     * @param string $data
+     * @return string
+     */
+    private function _gzip_string($data)
+    {
+        return gzencode($data);
+    }
+}
+
+class BatchConsumer extends AbstractConsumer
+{
+
+    private $_buffers;
+    private $_max_size;
+    private $_url_prefix;
+    private $_request_timeout;
+    private $file_handler;
+
+    /**
+     * @param string $url_prefix 服务器的 URL 地址。
+     * @param int $max_size 批量发送的阈值。
+     * @param int $request_timeout 请求服务器的超时时间，单位毫秒。
+     * @param boolean $response_info 发送数据请求是否返回详情 默认 false。
+     * @param string $filename 发送数据请求的返回状态及数据落盘记录，必须同时 $response_info 为 ture 时，才会记录。
+     */
+    public function __construct($url_prefix, $max_size = 50, $request_timeout = 2000, $response_info = false, $filename = false)
+    {
+        $this->_buffers = array();
+        $this->_max_size = $max_size;
+        $this->_url_prefix = $url_prefix;
+        $this->_request_timeout = $request_timeout;
+        $this->_response_info = $response_info;
+        try {
+            if ($filename !== false && $this->_response_info !== false) {
+                $this->file_handler = fopen($filename, 'a+');
+            }
+        } catch (\Exception $e) {
+            echo $e;
+        }
+    }
+
+
+    public function send($msg)
+    {
+        echo "\n===========发送的json数据=============\n";
+        echo $msg;
+        echo "\n========================\n";
+        $this->_buffers[] = $msg;
+        if (count($this->_buffers) >= $this->_max_size) {
+            return $this->flush();
+        }
+        // data into cache buffers，back some log
+        if ($this->_response_info) {
+            $result = array(
+                "ret_content" => "data into cache buffers",
+                "ret_origin_data" => "",
+                "ret_code" => 900,
+            );
+            if ($this->file_handler !== null) {
+                // need to write log
+                fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
+            }
+            return $result;
+        }
+        return true;
+    }
+
+    public function flush()
+    {
+        if (empty($this->_buffers)) {
+            $ret = false;
+        } else {
+            $ret = $this->_do_request(array(
+                "data" => $this->_encode_msg_list($this->_buffers),
+                "gzip" => 1
+            ), $this->_buffers);
+        }
+        if ($ret) {
+            $this->_buffers = array();
+        }
+        return $ret;
+    }
+
+    /**
+     * 发送数据包给远程服务器。
+     *
+     * @param array $data
+     * @return bool 请求是否成功
+     */
+    protected function _do_request($data, $origin_data)
+    {
+        $params = array();
+        foreach ($data as $key => $value) {
+            $params[] = $key . '=' . ($value);
+        }
+
+        echo "\n===========发送的body数据=============\n";
+        $postFields = implode('&', $params);
+        echo $postFields;
+        echo "\n========================\n";
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_URL, $this->_url_prefix);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, $this->_request_timeout);
+        curl_setopt($ch, CURLOPT_TIMEOUT_MS, $this->_request_timeout);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, implode('&', $params));
+        curl_setopt($ch, CURLOPT_USERAGENT, "PHP SDK");
+
+        //judge https
+        $pos = strpos($this->_url_prefix, "https");
+        if ($pos === 0) {
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        }
+
+        $ret = curl_exec($ch);
+
+        // judge back detail response
+        if ($this->_response_info) {
+            $result = array(
+                "ret_content" => $ret,
+                "ret_origin_data" => $origin_data,
+                "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE),
+            );
+            if ($this->file_handler !== null) {
+                // need to write log
+                fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
+            }
+            curl_close($ch);
+            return $result;
+        }
+        if (false === $ret) {
+            curl_close($ch);
+            return false;
+        } else {
+            curl_close($ch);
+            return true;
+        }
+    }
+
+    /**
+     * 对待发送的数据进行编码
+     *
+     * @param array $msg_list
+     * @return string
+     */
+    private function _encode_msg_list($msg_list)
+    {
+        return base64_encode($this->_gzip_string("[" . implode(",", $msg_list) . "]"));
+    }
+
+    /**
+     * GZIP 压缩一个字符串
+     *
+     * @param string $data
+     * @return string
+     */
+    private function _gzip_string($data)
+    {
+        return gzencode($data);
+    }
+
+    public function close()
+    {
+        $closeResult = $this->flush();
+        if ($this->file_handler !== null) {
+            fclose($this->file_handler);
+        }
+        return $closeResult;
+    }
+}
