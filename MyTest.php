@@ -15,8 +15,8 @@ class MyTest extends TestCase {
     // 初始化
     protected function setUp(): void {
         echo "\n =====设置初始属性======\n";
-        $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=new_category&token=ui5scybH";
-        // $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=phpSDKTest&token=XmAD6Saq";
+        // $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=new_category&token=ui5scybH";
+        $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=phpSDKTest&token=XmAD6Saq";
         $this->consumer=new BatchConsumer($SERVER_URL,5);
         $this->ha=new HinaSdk($this->consumer);
         // 注册全局属性
@@ -50,7 +50,7 @@ class MyTest extends TestCase {
             "e_money"=>25888
         );
         // 登录的true改成false，可以测试未登录的事件
-        $this->ha->track($uuid,true, "tuze_test", $properties);
+        $this->ha->track($uuid,true, "tuze_test_event", $properties);
         $this->ha->flush();
         $this->assertTrue(true);
     }
