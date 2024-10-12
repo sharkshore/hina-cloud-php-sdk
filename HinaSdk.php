@@ -393,7 +393,7 @@ class HinaSdk
      * @param array $profiles
      * @return bool
      */
-    public function user_append($account_id, $is_login_id, $profiles = array())
+    public function userAppend($account_id, $is_login_id, $profiles = array())
     {
         try {
             if (!is_bool($is_login_id)) {
@@ -649,7 +649,7 @@ class DebugConsumer extends AbstractConsumer
     {
         $params = array();
         foreach ($data as $key => $value) {
-            $params[] = $key . '=' . ($value);
+            $params[] = $key . '=' . urlencode($value);
         }
 
         $ch = curl_init();
@@ -750,9 +750,6 @@ class BatchConsumer extends AbstractConsumer
 
     public function send($msg)
     {
-        echo "\n===========发送的json数据=============\n";
-        echo $msg;
-        echo "\n========================\n";
         $this->_buffers[] = $msg;
         if (count($this->_buffers) >= $this->_max_size) {
             return $this->flush();
@@ -779,7 +776,7 @@ class BatchConsumer extends AbstractConsumer
             $ret = false;
         } else {
             $ret = $this->_do_request(array(
-                "data" => $this->_encode_msg_list($this->_buffers),
+                "data_list" => $this->_encode_msg_list($this->_buffers),
                 "gzip" => 1
             ), $this->_buffers);
         }
@@ -799,8 +796,22 @@ class BatchConsumer extends AbstractConsumer
     {
         $params = array();
         foreach ($data as $key => $value) {
-            $params[] = $key . '=' . ($value);
+            // $params[] = $key . '=' . ($value);
+            $params[] = $key . '=' . urlencode($value);
         }
+
+        echo "\n===========发送的原始json数据=============\n";
+        print_r($origin_data);
+        echo "\n========================\n";
+
+        echo "\n===========发送的data数据=============\n";
+        print_r($data);
+        echo "\n========================\n";
+
+        echo "\n===========发送的url数据=============\n";
+        echo $this->_url_prefix;
+        echo "\n========================\n";
+
 
         echo "\n===========发送的body数据=============\n";
         $postFields = implode('&', $params);
@@ -827,7 +838,8 @@ class BatchConsumer extends AbstractConsumer
         $ret = curl_exec($ch);
 
         // judge back detail response
-        if ($this->_response_info) {
+        // if ($this->_response_info) {
+        if (true) {
             $result = array(
                 "ret_content" => $ret,
                 "ret_origin_data" => $origin_data,
@@ -838,6 +850,12 @@ class BatchConsumer extends AbstractConsumer
                 fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
             }
             curl_close($ch);
+            echo "\n===========响应数据=============\n";
+            echo "\n".$ret."\n";
+            echo "\n========================\n";
+            print_r($result);
+            echo "\n========================\n";
+
             return $result;
         }
         if (false === $ret) {

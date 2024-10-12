@@ -15,7 +15,8 @@ class MyTest extends TestCase {
     // 初始化
     protected function setUp(): void {
         echo "\n =====设置初始属性======\n";
-        $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/ha?project=yituiAll&token=yt888";
+        $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=new_category&token=ui5scybH";
+        // $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=phpSDKTest&token=XmAD6Saq";
         $this->consumer=new BatchConsumer($SERVER_URL,5);
         $this->ha=new HinaSdk($this->consumer);
         // 注册全局属性
@@ -44,12 +45,12 @@ class MyTest extends TestCase {
 
         $uuid = bin2hex(random_bytes(16));
         $properties=array(
-            "cat_name"=>"zhaoshangaaa",
-            "pay_type"=>"onlineaaa",
-            "pay_money"=>25888
+            "e_name"=>"zhaoshangaaa",
+            "e_type"=>"onlineaaa",
+            "e_money"=>25888
         );
         // 登录的true改成false，可以测试未登录的事件
-        $this->ha->track($uuid,true, "test_event_nologin", $properties);
+        $this->ha->track($uuid,true, "tuze_test", $properties);
         $this->ha->flush();
         $this->assertTrue(true);
     }
@@ -67,9 +68,9 @@ class MyTest extends TestCase {
     public function test_user_set(){
         $uuid = bin2hex(random_bytes(16));
         $properties=array(
-            "cat_name"=>"zhaoshangaaa",
-            "pay_type"=>"onlineaaa",
-            "pay_money"=>25888
+            "u_name"=>"zhaoshangaaa",
+            "u_type"=>"onlineaaa",
+            "u_money"=>25888
         );
         $this->ha->userSet($uuid,true,  $properties);
         $this->ha->flush();
