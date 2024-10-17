@@ -5,4 +5,4 @@ set filter=%1
 if "%filter%"=="" set filter=test_simple
 
 REM 运行 phpunit 测试
-vendor\bin\phpunit --filter %filter% MyTest.php
+..\vendor\bin\phpunit --filter %filter% MyTest.php

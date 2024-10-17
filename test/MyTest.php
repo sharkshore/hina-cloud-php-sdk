@@ -1,5 +1,5 @@
 <?php
-require_once("HinaSdk.php");
+require_once("../HinaSdk.php");
 date_default_timezone_set("Asia/Shanghai");
 use PHPUnit\Framework\TestCase;
 
