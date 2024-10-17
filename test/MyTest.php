@@ -14,7 +14,7 @@ class MyTest extends TestCase {
 
     // 初始化
     protected function setUp(): void {
-        echo "\n =====设置初始属性======\n";
+        echo "\n 设置初始属性\n";
         // $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=new_category&token=ui5scybH";
         $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=phpSDKTest&token=XmAD6Saq";
         $this->consumer=new BatchConsumer($SERVER_URL,5);
@@ -33,7 +33,7 @@ class MyTest extends TestCase {
 
     // 结束
     protected function tearDown(): void {
-        echo "\n =====设置结束属性======\n";
+        echo "\n 设置结束属性\n";
     }
 
 
@@ -43,7 +43,7 @@ class MyTest extends TestCase {
     }
 
     // 测试登录事件
-    public function test_event(){
+    public function test_login_event(){
 
         $uuid = bin2hex(random_bytes(16));
         $properties=array(
@@ -58,7 +58,7 @@ class MyTest extends TestCase {
     }
 
     // 测试未登录事件
-    public function test_event2(){
+    public function test_nologin_event(){
 
         $uuid = bin2hex(random_bytes(16));
         $properties=array(

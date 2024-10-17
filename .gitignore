@@ -4,3 +4,4 @@ composer.lock
 *.zip
 *.tar.gz
 *.tar
+tools/

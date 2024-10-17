@@ -28,5 +28,5 @@ $properties = array(
 echo $uuid. "\n";
 
 // 这里的 true 可以根据需要调整
-$ha->track($uuid, true, "tuze_test_event", $properties);
+$ha->track($uuid, true, "benchtest", $properties);
 $ha->flush();

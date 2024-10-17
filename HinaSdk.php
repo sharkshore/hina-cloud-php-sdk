@@ -1,6 +1,33 @@
 <?php
 
 define('HINA_SDK_VERSION', '1.0.0');
+define('HINA_SDK_LOG_SWITCH', false);
+
+
+if(HINA_SDK_LOG_SWITCH == true){
+    echo "HinaSdk日志开关已开启\n";
+}
+
+function log_message($type,$message,$annotation) {
+
+    if(HINA_SDK_LOG_SWITCH == false){
+        return;
+    }
+
+    if(strcmp($type,'echo') == 0){
+        echo "\n===========$annotation=============\n";
+        echo $message . PHP_EOL;
+        echo "\n==========================================\n";
+    }else if(strcmp($type,'print') == 0){
+        echo "\n===========$annotation=============\n";
+        print_r($message);
+        echo "\n==========================================\n";
+    }else {
+        echo "\n===========type类型设置错误=============\n";
+    }
+}
+
+
 
 class HinaSdkException extends \Exception
 {
@@ -830,23 +857,10 @@ class BatchConsumer extends AbstractConsumer
             $params[] = $key . '=' . urlencode($value);
         }
 
-        echo "\n===========发送的原始json数据=============\n";
-        print_r($origin_data);
-        echo "\n========================\n";
-
-        echo "\n===========发送的data数据=============\n";
-        print_r($data);
-        echo "\n========================\n";
-
-        echo "\n===========发送的url数据=============\n";
-        echo $this->_url_prefix;
-        echo "\n========================\n";
-
-
-        echo "\n===========发送的body数据=============\n";
-        $postFields = implode('&', $params);
-        echo $postFields;
-        echo "\n========================\n";
+        log_message('print',$origin_data,"发送的原始json");
+        log_message('print',$data,"发送的data");
+        log_message('print',$this->_url_prefix,"发送的url");
+        log_message('print',implode('&', $params),"发送的body");
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
@@ -880,11 +894,8 @@ class BatchConsumer extends AbstractConsumer
                 fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
             }
             curl_close($ch);
-            echo "\n===========响应数据=============\n";
-            echo "\n".$ret."\n";
-            echo "\n========================\n";
-            print_r($result);
-            echo "\n========================\n";
+            log_message('print',$ret,"响应数据：ret");
+            log_message('print',$result,"响应数据：result");
 
             return $result;
         }
