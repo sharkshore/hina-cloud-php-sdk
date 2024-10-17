@@ -1,6 +1,6 @@
 <?php
 
-define('HINA_SDK_VERSION', '2.0.3');
+define('HINA_SDK_VERSION', '1.0.0');
 
 class HinaSdkException extends \Exception
 {
@@ -28,6 +28,7 @@ class HinaSdk
     private $_consumer;
     private $_super_properties;
     private $_is_win;
+    private $_max_value_length=1024;
 
     /*
      * 为兼容旧版，实现构造函数重载
@@ -58,6 +59,28 @@ class HinaSdk
         }
         $this->_consumer = $consumer;
         $this->clearSuperProperties();
+    }
+
+    public function set_max_value_length($length)
+    {
+        if($length == null){
+            throw new HinaSdkException("属性值最大长度不能为null");
+        }
+        if(!is_numeric($length)){
+            throw new HinaSdkException("属性值最大长度必须为数字");
+        }
+
+        if ($length > 5120) {
+            $this->_max_value_length = 5120;
+            error_log("属性值最大长度不能超过5120，已自动调整为5120");
+        } elseif ($length < 1) {
+            $this->_max_value_length = 1024; 
+            error_log("属性值最大长度不能小于1，已自动调整为1024");
+        } else {
+            $this->_max_value_length = $length;
+            error_log("属性值最大长度已设置为：{$length}");
+        }
+
     }
 
     private function _assert_key_with_regex($key)
@@ -113,9 +136,10 @@ class HinaSdk
                 throw new HinaSdkIllegalDataException("property value must be a str/int/float/list. [key='$key']");
             }
 
-            if (is_string($value) && strlen($value) > 5120) {
-                throw new HinaSdkIllegalDataException("the max length of property value is 5120. [key=$key]");
-            }
+            // 此处代码注释，如果属性值超长，则截断处理
+            // if (is_string($value) && strlen($value) > 5120) {
+            //     throw new HinaSdkIllegalDataException("the max length of property value is 5120. [key=$key]");
+            // }
 
             // 如果是数组，只支持 Value 是字符串格式的简单非关联数组
             if (is_array($value)) {
@@ -130,6 +154,17 @@ class HinaSdk
                 }
             }
         }
+    }
+
+    // 属性值超长，截断处理
+    private function _truncation_properties($properties =array()){
+        $max_length=$this->_max_value_length;
+        foreach ($properties as $key => $value) {
+            if (is_string($value) && strlen($value) > $max_length) {
+                $properties[$key] = substr($value, 0, $max_length); 
+            }
+        }
+        return $properties;
     }
 
 
@@ -150,10 +185,6 @@ class HinaSdk
             }
             $data['anonymous_id'] = strval($data['anonymous_id']);
         }
-
-
-
-
 
         // 检查time
         // 检查并规范化 time 字段
@@ -179,6 +210,7 @@ class HinaSdk
         // 检查 properties
         if (isset($data['properties']) && is_array($data['properties'])) {
             $this->_assert_properties($data['properties']);
+            $data['properties']=$this->_truncation_properties($data['properties']);
 
             // XXX: 解决 PHP 中空 array() 转换成 JSON [] 的问题
             if (count($data['properties']) == 0) {
@@ -277,11 +309,15 @@ class HinaSdk
             if (!is_bool($is_login_id)) {
                 throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
             }
+            $default_properties = [
+                'H_timezone_offset' => '-480',
+            ];
             if ($properties) {
-                $all_properties = array_merge($this->_super_properties, $properties);
+                $all_properties = array_merge($default_properties,$this->_super_properties, $properties);
             } else {
-                $all_properties = array_merge($this->_super_properties, array());
+                $all_properties = array_merge($default_properties,$this->_super_properties, array());
             }
+
             if($is_login_id){
                 $aid=$account_id;
                 $oid=null;
@@ -433,9 +469,6 @@ class HinaSdk
     }
 
 
-
-
-
     /**
      * 设置每个事件都带有的一些公共属性
      *
@@ -489,12 +522,9 @@ class HinaSdk
     {
         $event_time = $this->_extract_user_time($properties);
 
-
-        // 设置lib_version
+        // 覆盖以下属性
         $properties['H_lib'] = 'php';
         $properties['H_lib_version'] = HINA_SDK_VERSION;
-        $properties['H_timezone_offset'] = '-480';
-
 
         $data = array(
             'type' => $update_type,

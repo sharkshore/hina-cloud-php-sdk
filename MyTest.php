@@ -26,6 +26,8 @@ class MyTest extends TestCase {
             "super_property3"=>"value3"
         );
         $this->ha->registerSuperProperties($super_properties);
+        // 设置属性值最大长度
+        $this->ha->set_max_value_length(6);
 
     }
 
@@ -40,7 +42,7 @@ class MyTest extends TestCase {
         $this->assertTrue(true);
     }
 
-    // 测试事件
+    // 测试登录事件
     public function test_event(){
 
         $uuid = bin2hex(random_bytes(16));
@@ -49,12 +51,28 @@ class MyTest extends TestCase {
             "e_type"=>"onlineaaa",
             "e_money"=>25888
         );
-        // 登录的true改成false，可以测试未登录的事件
+        // 登录的true改成false，可以测试登录的事件
         $this->ha->track($uuid,true, "tuze_test_event", $properties);
         $this->ha->flush();
         $this->assertTrue(true);
     }
 
+    // 测试未登录事件
+    public function test_event2(){
+
+        $uuid = bin2hex(random_bytes(16));
+        $properties=array(
+            "e_name"=>"zhaoshangaaa",
+            "e_type"=>"onlineaaa",
+            "e_money"=>25888,
+            "H_timezone_offset"=>"720",
+            "H_lib"=>"Java"
+        );
+        // 登录的true改成false，可以测试登录的事件
+        $this->ha->track($uuid,false, "tuze_test_event", $properties);
+        $this->ha->flush();
+        $this->assertTrue(true);
+    }
 
     // 测试绑定ID
     public function test_bind_id(){
@@ -64,7 +82,7 @@ class MyTest extends TestCase {
 
     }
 
-    // 用户属性设置
+    // 测试用户属性设置
     public function test_user_set(){
         $uuid = bin2hex(random_bytes(16));
         $properties=array(
@@ -78,6 +96,26 @@ class MyTest extends TestCase {
     }
 
 
+
+
+
+
+
+    // 测试数组合并
+    public function test_array(){
+        $arr1=[
+            "name"=>"11111"
+        ];
+        $arr2=[
+            "name"=>"22222"
+        ];
+        $arr3=[
+            "name"=>"33333"
+        ];
+
+        $marr=array_merge($arr1,$arr2,$arr3);
+        print_r($marr);
+    }
 
 
 
