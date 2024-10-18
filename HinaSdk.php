@@ -163,23 +163,17 @@ class HinaSdk
                 throw new HinaSdkIllegalDataException("property value must be a str/int/float/list. [key='$key']");
             }
 
-            // 此处代码注释，如果属性值超长，则截断处理
-            // if (is_string($value) && strlen($value) > 5120) {
-            //     throw new HinaSdkIllegalDataException("the max length of property value is 5120. [key=$key]");
+            // if (is_array($value)) {
+            //     if (array_values($value) !== $value) {
+            //         throw new HinaSdkIllegalDataException("[list] property must not be associative. [key='$key']");
+            //     }
+
+            //     foreach ($value as $lvalue) {
+            //         if (!is_string($lvalue)) {
+            //             throw new HinaSdkIllegalDataException("[list] property's value must be a str. [value='$lvalue']");
+            //         }
+            //     }
             // }
-
-            // 如果是数组，只支持 Value 是字符串格式的简单非关联数组
-            if (is_array($value)) {
-                if (array_values($value) !== $value) {
-                    throw new HinaSdkIllegalDataException("[list] property must not be associative. [key='$key']");
-                }
-
-                foreach ($value as $lvalue) {
-                    if (!is_string($lvalue)) {
-                        throw new HinaSdkIllegalDataException("[list] property's value must be a str. [value='$lvalue']");
-                    }
-                }
-            }
         }
     }
 
@@ -422,7 +416,7 @@ class HinaSdk
             if (!is_bool($is_login_id)) {
                 throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
             }
-            return $this->_track_event('user_SetOnce', null, $account_id,  null, $profiles);
+            return $this->_track_event('user_setOnce', null, $account_id,  null, $profiles);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
         }
@@ -638,7 +632,6 @@ class DebugConsumer extends AbstractConsumer
 
     private $_debug_url_prefix;
     private $_request_timeout;
-    private $_debug_write_data;
 
     /**
      * DebugConsumer constructor,用于调试模式.
@@ -649,27 +642,12 @@ class DebugConsumer extends AbstractConsumer
      * @param int $request_timeout 请求服务器的超时时间,单位毫秒.
      * @throws HinaSdkDebugException
      */
-    public function __construct($url_prefix, $write_data = True, $request_timeout = 1000)
+    public function __construct($url_prefix,  $request_timeout = 2000)
     {
-        $parsed_url = parse_url($url_prefix);
-        if ($parsed_url === false) {
-            throw new HinaSdkDebugException("Invalid server url of Sensors Analytics.");
-        }
 
-        // 将 URI Path 替换成 Debug 模式的 '/debug'
-        $parsed_url['path'] = '/debug';
-
-        $this->_debug_url_prefix = ((isset($parsed_url['scheme'])) ? $parsed_url['scheme'] . '://' : '')
-            . ((isset($parsed_url['user'])) ? $parsed_url['user'] . ((isset($parsed_url['pass'])) ? ':' . $parsed_url['pass'] : '') . '@' : '')
-            . ((isset($parsed_url['host'])) ? $parsed_url['host'] : '')
-            . ((isset($parsed_url['port'])) ? ':' . $parsed_url['port'] : '')
-            . ((isset($parsed_url['path'])) ? $parsed_url['path'] : '')
-            . ((isset($parsed_url['query'])) ? '?' . $parsed_url['query'] : '')
-            . ((isset($parsed_url['fragment'])) ? '#' . $parsed_url['fragment'] : '')
-        ;
+        $this->_debug_url_prefix = $url_prefix;
 
         $this->_request_timeout = $request_timeout;
-        $this->_debug_write_data = $write_data;
 
     }
 
@@ -678,7 +656,7 @@ class DebugConsumer extends AbstractConsumer
         $buffers = array();
         $buffers[] = $msg;
         $response = $this->_do_request(array(
-            "data" => $this->_encode_msg_list($buffers),
+            "data_list" => $this->_encode_msg_list($buffers),
             "gzip" => 1
         ));
         printf("\n=========================================================================\n");
@@ -712,15 +690,6 @@ class DebugConsumer extends AbstractConsumer
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_URL, $this->_debug_url_prefix);
-        if ($this->_debug_write_data === false) {
-            // 这个参数为 false, 说明只需要校验,不需要真正写入
-            print ("\ntry Dry-Run\n");
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                "Dry-Run:true"
-            ));
-
-
-        }
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT_MS, $this->_request_timeout);
         curl_setopt($ch, CURLOPT_TIMEOUT_MS, $this->_request_timeout);
         curl_setopt($ch, CURLOPT_POST, 1);
@@ -853,7 +822,6 @@ class BatchConsumer extends AbstractConsumer
     {
         $params = array();
         foreach ($data as $key => $value) {
-            // $params[] = $key . '=' . ($value);
             $params[] = $key . '=' . urlencode($value);
         }
 

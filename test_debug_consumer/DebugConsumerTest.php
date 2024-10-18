@@ -3,7 +3,7 @@ require_once("../HinaSdk.php");
 date_default_timezone_set("Asia/Shanghai");
 use PHPUnit\Framework\TestCase;
 
-class MyTest extends TestCase {
+class DebugConsumerTest extends TestCase {
 
 
     private $ha;
@@ -14,10 +14,9 @@ class MyTest extends TestCase {
 
     // 初始化
     protected function setUp(): void {
-        echo "\n 设置初始属性\n";
         // $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=new_category&token=ui5scybH";
         $SERVER_URL="https://test-hicloud.hinadt.com/gateway/hina-cloud-engine/gather?project=phpSDKTest&token=XmAD6Saq";
-        $this->consumer=new BatchConsumer($SERVER_URL,5);
+        $this->consumer=new DebugConsumer($SERVER_URL);
         $this->ha=new HinaSdk($this->consumer);
         // 注册全局属性
         $super_properties=array(
@@ -33,7 +32,7 @@ class MyTest extends TestCase {
 
     // 结束
     protected function tearDown(): void {
-        echo "\n 设置结束属性\n";
+
     }
 
 
@@ -70,6 +69,34 @@ class MyTest extends TestCase {
         );
         // 登录的true改成false，可以测试登录的事件
         $this->ha->track($uuid,false, "tuze_test_event", $properties);
+        $this->ha->flush();
+        $this->assertTrue(true);
+    }
+
+    public function test_object_event(){
+
+        $uuid = bin2hex(random_bytes(16));
+        $properties=array(
+            "e_name"=>"zhaoshangaaa",
+            "e_type"=>"onlineaaa",
+            "e_object"=>[
+                "name"=>"zhaoshang",
+                "age"=>"25",
+                "sex"=>"male",
+                "address"=>[
+                    "province"=>"Beijing",
+                    "city"=>"Beijing"
+                ],
+                "hobby"=>[
+                    "reading",
+                    "swimming",
+                    "running"
+                ]
+            ],
+            "e_money"=>25888
+        );
+        // 登录的true改成false，可以测试登录的事件
+        $this->ha->track($uuid,true, "tuze_test_event", $properties);
         $this->ha->flush();
         $this->assertTrue(true);
     }
