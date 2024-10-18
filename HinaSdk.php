@@ -8,6 +8,7 @@ if(HINA_SDK_LOG_SWITCH == true){
     echo "HinaSdk日志开关已开启\n";
 }
 
+
 function log_message($type,$message,$annotation) {
 
     if(HINA_SDK_LOG_SWITCH == false){
