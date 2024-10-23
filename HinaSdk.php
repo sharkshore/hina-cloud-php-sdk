@@ -69,7 +69,7 @@ class HinaSdk
      *
      * @param AbstractConsumer $consumer
      */
-    public function __construct1($consumer)
+    public function __construct($consumer)
     {
         $this->_is_win = false;
         // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
