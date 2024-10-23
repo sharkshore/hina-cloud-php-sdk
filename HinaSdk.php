@@ -3,12 +3,12 @@
 define('HINA_SDK_VERSION', '1.0.0');
 define('HINA_SDK_LOG_SWITCH', false);
 
-
+// 日志开关
 if(HINA_SDK_LOG_SWITCH == true){
     echo "HinaSdk日志开关已开启\n";
 }
 
-
+// 日志函数
 function log_message($type,$message,$annotation) {
 
     if(HINA_SDK_LOG_SWITCH == false){
@@ -29,7 +29,7 @@ function log_message($type,$message,$annotation) {
 }
 
 
-
+// SDK异常基类
 class HinaSdkException extends \Exception
 {
 }
@@ -53,23 +53,14 @@ class HinaSdkDebugException extends \Exception
 class HinaSdk
 {
 
+    // 执行器
     private $_consumer;
+    // 公共属性
     private $_super_properties;
+    // 是否是 Windows 系统
     private $_is_win;
+    // 属性值最大长度
     private $_max_value_length=1024;
-
-    /*
-     * 为兼容旧版，实现构造函数重载
-     */
-    public function __construct()
-    {
-        $a = func_get_args(); //获取构造函数中的参数
-        $i = count($a);
-        if (method_exists($this, $f = '__construct' . $i)) {
-            call_user_func_array(array($this, $f), $a);
-        }
-    }
-
 
 
 
@@ -89,6 +80,12 @@ class HinaSdk
         $this->clearSuperProperties();
     }
 
+    /**
+     * 设置属性值最大长度，超长的属性值会被截断。
+     * @param mixed $length
+     * @throws \HinaSdkException
+     * @return void
+     */
     public function set_max_value_length($length)
     {
         if($length == null){
@@ -111,6 +108,12 @@ class HinaSdk
 
     }
 
+    /**
+     * 属性名规则
+     * @param mixed $key
+     * @throws \HinaSdkIllegalDataException
+     * @return void
+     */
     private function _assert_key_with_regex($key)
     {
         $name_pattern = "/^((?!^account_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$|^user_group|^user_tag)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
@@ -120,25 +123,12 @@ class HinaSdk
     }
 
 
-    private function _assert_key($type, $key)
-    {
-        if ($key == null || strlen($key) == 0) {
-            throw new HinaSdkIllegalDataException(sprintf("the %s key is empty or null.", $type));
-        }
-        $this->_assert_key_with_regex($key);
-    }
-
-
-    private function _assert_value($type, $value)
-    {
-        if ($value == null || strlen($value) == 0) {
-            throw new HinaSdkIllegalDataException(sprintf("the %s value is empty or null.", $type));
-        }
-        if (strlen($value) > 255) {
-            throw new HinaSdkIllegalDataException(sprintf("the %s value %s is too long, max length is 255.", $type, $value));
-        }
-    }
-
+    /**
+     * properties 规则
+     * @param mixed $properties
+     * @throws \HinaSdkIllegalDataException
+     * @return void
+     */
     private function _assert_properties($properties = array())
     {
         $name_pattern = "/^((?!^account_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
@@ -164,17 +154,6 @@ class HinaSdk
                 throw new HinaSdkIllegalDataException("property value must be a str/int/float/list. [key='$key']");
             }
 
-            // if (is_array($value)) {
-            //     if (array_values($value) !== $value) {
-            //         throw new HinaSdkIllegalDataException("[list] property must not be associative. [key='$key']");
-            //     }
-
-            //     foreach ($value as $lvalue) {
-            //         if (!is_string($lvalue)) {
-            //             throw new HinaSdkIllegalDataException("[list] property's value must be a str. [value='$lvalue']");
-            //         }
-            //     }
-            // }
         }
     }
 
@@ -190,6 +169,12 @@ class HinaSdk
     }
 
 
+    /**
+     * 发送给 HinaCloud 的数据。
+     * @param mixed $data
+     * @throws \HinaSdkIllegalDataException
+     * @return mixed
+     */
     private function _normalize_data($data)
     {
         // 检查 account_id
@@ -223,7 +208,6 @@ class HinaSdk
         }
         $data['time'] = $ts;
 
-
         // 检查 Event Name
         if (isset($data['event'])) {
             $this->_assert_key_with_regex($data['event']);
@@ -241,8 +225,6 @@ class HinaSdk
         } else {
             throw new HinaSdkIllegalDataException("property must be an array.");
         }
-
-
 
         return $data;
     }
@@ -314,7 +296,7 @@ class HinaSdk
 
 
     /**
-     * 跟踪一个用户的行为。
+     * 发送事件
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -354,7 +336,7 @@ class HinaSdk
     }
 
     /**
-     * 
+     * 匿名ID和账号ID绑定
      *
      * @param string $account_id 用户注册之后的唯一标识。
      * @param string $original_id 用户注册前的唯一标识。
@@ -384,7 +366,7 @@ class HinaSdk
     }
 
     /**
-     * 直接设置一个用户的 Profile，如果已存在则覆盖。
+     * 用户属性设置
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -404,7 +386,7 @@ class HinaSdk
     }
 
     /**
-     * 直接设置一个用户的 Profile，如果某个 Profile 已存在则不设置。
+     * 用户属性设置，如果已存在则不设置。
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -424,7 +406,7 @@ class HinaSdk
     }
 
     /**
-     * 增减/减少一个用户的某一个或者多个数值类型的 Profile。
+     * 用户属性，数值类型增加。
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -444,7 +426,7 @@ class HinaSdk
     }
 
     /**
-     * 追加一个用户的某一个或者多个集合类型的 Profile。
+     * 用户属性，集合类型追加元素
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -464,7 +446,7 @@ class HinaSdk
     }
 
     /**
-     * 删除一个用户的一个或者多个 Profile。
+     * 删除用户属性
      *
      * @param string $account_id 用户的唯一标识。
      * @param bool $is_login_id 用户标识是否是登录 ID，false 表示该标识是一个匿名 ID。
@@ -492,7 +474,7 @@ class HinaSdk
 
 
     /**
-     * 设置每个事件都带有的一些公共属性
+     * 设置公共属性
      *
      * @param array $super_properties
      */
@@ -502,7 +484,7 @@ class HinaSdk
     }
 
     /**
-     * 删除所有已设置的事件公共属性
+     * 删除公共属性
      */
     public function  clearSuperProperties()
     {
@@ -532,6 +514,7 @@ class HinaSdk
     }
 
     /**
+     * track 事件的实现方法。
      * @param string $update_type
      * @param string $event_name
      * @param string $account_id
@@ -601,6 +584,9 @@ abstract class AbstractConsumer
 }
 
 
+/**
+ * 文件执行器
+ */
 class FileConsumer extends AbstractConsumer
 {
 
@@ -628,6 +614,9 @@ class FileConsumer extends AbstractConsumer
     }
 }
 
+/**
+ * Debug执行器
+ */
 class DebugConsumer extends AbstractConsumer
 {
 
@@ -652,6 +641,12 @@ class DebugConsumer extends AbstractConsumer
 
     }
 
+    /**
+     * HTTP发送数据给远程服务器。
+     * @param mixed $msg
+     * @throws \HinaSdkDebugException
+     * @return void
+     */
     public function send($msg)
     {
         $buffers = array();
@@ -742,6 +737,9 @@ class DebugConsumer extends AbstractConsumer
     }
 }
 
+/**
+ * 批量发送执行器
+ */
 class BatchConsumer extends AbstractConsumer
 {
 
@@ -758,7 +756,7 @@ class BatchConsumer extends AbstractConsumer
      * @param boolean $response_info 发送数据请求是否返回详情 默认 false。
      * @param string $filename 发送数据请求的返回状态及数据落盘记录，必须同时 $response_info 为 ture 时，才会记录。
      */
-    public function __construct($url_prefix, $max_size = 50, $request_timeout = 2000, $response_info = false, $filename = false)
+    public function __construct($url_prefix, $max_size = 200, $request_timeout = 2000, $response_info = false, $filename = false)
     {
         $this->_buffers = array();
         $this->_max_size = $max_size;
@@ -775,6 +773,11 @@ class BatchConsumer extends AbstractConsumer
     }
 
 
+    /**
+     * HTTP发送数据给远程服务器。
+     * @param mixed $msg
+     * @return array|bool
+     */
     public function send($msg)
     {
         $this->_buffers[] = $msg;
@@ -797,6 +800,10 @@ class BatchConsumer extends AbstractConsumer
         return true;
     }
 
+    /**
+     * 清空缓存数据
+     * @return bool
+     */
     public function flush()
     {
         if (empty($this->_buffers)) {
