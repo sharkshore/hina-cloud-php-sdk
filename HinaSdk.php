@@ -347,7 +347,7 @@ class HinaSdk
             if(is_null($event_time)) {
                 $event_time=substr((microtime(true) * 1000), 0, 13);
                 $properties['time'] = $event_time;
-            }elseif(_assert_13_digit_timestamp($event_time)){
+            }elseif($this->_assert_13_digit_timestamp($event_time)){
                 $properties['time'] = $event_time;
             }else{
                 throw new HinaSdkIllegalDataException("event_time 必须是13位时间戳.");
