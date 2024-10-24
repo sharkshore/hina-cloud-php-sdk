@@ -57,8 +57,6 @@ class HinaSdk
     private $_consumer;
     // 公共属性
     private $_super_properties;
-    // 是否是 Windows 系统
-    private $_is_win;
     // 属性值最大长度
     private $_max_value_length=1024;
 
@@ -69,15 +67,44 @@ class HinaSdk
      *
      * @param AbstractConsumer $consumer
      */
-    public function __construct($consumer)
+    private function __construct($consumer)
     {
-        $this->_is_win = false;
-        // 不支持 Windows，因为 Windows 版本的 PHP 都不支持 long
-        if (strtoupper(substr(PHP_OS, 0, 3)) == "WIN") {
-            $this->_is_win = true;
-        }
         $this->_consumer = $consumer;
         $this->clearSuperProperties();
+    }
+
+
+
+    /**
+     * 初始化FileConsumer，用于本地文件存储。
+     * @param mixed $filename
+     * @return HinaSdk
+     */
+    public static function initWithFile($filename){
+        $consumer=new FileConsumer($filename);
+        return new self($consumer);
+    }
+
+    /**
+     * 
+     * 初始化DebugConsumer，用于测试SDK接入正确性。
+     * @param mixed $url
+     * @return HinaSdk
+     */
+    public static function initWithDev($url,$request_timeout = 2000){
+        $consumer=new DebugConsumer($url,$request_timeout);
+        return new self($consumer);
+    }
+
+    /**
+     * 
+     * 初始化BatchConsumer，用于批量发送接口
+     * @param mixed $url
+     * @return HinaSdk
+     */
+    public static function initWithBatch($url, $max_size = 200, $request_timeout = 2000,  $filename = false){
+        $consumer=new BatchConsumer($url, $max_size, $request_timeout, $filename);
+        return new self($consumer);
     }
 
     /**
@@ -86,7 +113,7 @@ class HinaSdk
      * @throws \HinaSdkException
      * @return void
      */
-    public function set_max_value_length($length)
+    public function setLimitLength($length)
     {
         if($length == null){
             throw new HinaSdkException("属性值最大长度不能为null");
@@ -105,8 +132,8 @@ class HinaSdk
             $this->_max_value_length = $length;
             error_log("属性值最大长度已设置为：{$length}");
         }
-
     }
+
 
     /**
      * 属性名规则
@@ -120,6 +147,14 @@ class HinaSdk
         if (!preg_match($name_pattern, $key)) {
             throw new HinaSdkIllegalDataException("key must be a valid variable key. [key='{$key}']");
         }
+    }
+
+    /**
+     * 检查时间戳是否为13位
+     */
+    private function _assert_13_digit_timestamp($timestamp)
+    {
+        return preg_match('/^\d{13}$/', $timestamp);
     }
 
 
@@ -243,11 +278,7 @@ class HinaSdk
             unset($properties['$time']);
             return $time;
         }
-        if ($this->_is_win) { // windows return string
-            return substr((microtime(true) * 1000), 0, 13);
-        } else {
-            return (int) (microtime(true) * 1000);
-        }
+        return substr((microtime(true) * 1000), 0, 13);
     }
 
     
@@ -288,7 +319,7 @@ class HinaSdk
         // 去掉中间的横线
         $cleanUuid = str_replace('-', '', $uuid);
         // 生成4位随机数
-        $fourDigitNumber = rand(1000, 9999);
+        $fourDigitNumber = random_int(1000, 9999);
         // 返回拼接结果
         return $cleanUuid . $fourDigitNumber;
     }
@@ -304,14 +335,22 @@ class HinaSdk
      * @param array $properties 事件的属性。
      * @return bool
      */
-    public function track($account_id, $is_login_id, $event_name, $properties = array())
+    public function track($account_id, $is_login_id, $event_name, $properties = array(),$event_time = null)
     {
         try {
             if (!is_string($event_name)) {
-                throw new HinaSdkIllegalDataException("event name must be a str.");
+                throw new HinaSdkIllegalDataException("event_name 必须填写且为字符串.");
             }
             if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
+                throw new HinaSdkIllegalDataException("is_login_id 必须是 bool.");
+            }
+            if(is_null($event_time)) {
+                $event_time=substr((microtime(true) * 1000), 0, 13);
+                $properties['time'] = $event_time;
+            }elseif(_assert_13_digit_timestamp($event_time)){
+                $properties['time'] = $event_time;
+            }else{
+                throw new HinaSdkIllegalDataException("event_time 必须是13位时间戳.");
             }
             $default_properties = [
                 'H_timezone_offset' => '-480',
@@ -323,13 +362,13 @@ class HinaSdk
             }
 
             if($is_login_id){
-                $aid=$account_id;
-                $oid=null;
+                $new_account_id=$account_id;
+                $new_original_id=null;
             }else{
-                $aid=null;
-                $oid=$account_id;
+                $new_account_id=null;
+                $new_original_id=$account_id;
             }
-            return $this->_track_event('track', $event_name, $aid, $oid, $all_properties);
+            return $this->_track_event('track', $event_name, $new_account_id, $new_original_id, $all_properties);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
         }
@@ -344,14 +383,10 @@ class HinaSdk
      * @return bool
      * @throws HinaSdkIllegalDataException
      */
-    public function bindId($account_id, $original_id, $properties = array())
+    public function bindId($account_id, $original_id)
     {
         try {
-            if ($properties) {
-                $all_properties = array_merge($this->_super_properties, $properties);
-            } else {
-                $all_properties = array_merge($this->_super_properties, array());
-            }
+            $all_properties = array_merge($this->_super_properties, array());
             // 检查 original_id
             if (!$original_id or strlen($original_id) == 0) {
                 throw new HinaSdkIllegalDataException("property [original_id] must not be empty");
@@ -359,9 +394,11 @@ class HinaSdk
             if (strlen($original_id) > 255) {
                 throw new HinaSdkIllegalDataException("the max length of [original_id] is 255");
             }
-            return $this->_track_event('track_signup', 'H_SignUp', $account_id,  $original_id, $all_properties);
+            $res=$this->_track_event('track_signup', 'H_SignUp', $account_id,  $original_id, $all_properties);
+
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -373,15 +410,13 @@ class HinaSdk
      * @param array $profiles
      * @return bool
      */
-    public function userSet($account_id, $is_login_id, $profiles = array())
+    public function userSet($account_id,  $profiles = array())
     {
         try {
-            if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
-            }
             return $this->_track_event('user_set', null, $account_id,  null, $profiles);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -393,15 +428,13 @@ class HinaSdk
      * @param array $profiles
      * @return bool
      */
-    public function userSetOnce($account_id, $is_login_id, $profiles = array())
+    public function userSetOnce($account_id,  $profiles = array())
     {
         try {
-            if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
-            }
             return $this->_track_event('user_setOnce', null, $account_id,  null, $profiles);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -413,15 +446,13 @@ class HinaSdk
      * @param array $profiles
      * @return bool
      */
-    public function userAdd($account_id, $is_login_id, $profiles = array())
+    public function userAdd($account_id,  $profiles = array())
     {
         try {
-            if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
-            }
             return $this->_track_event('user_add', null, $account_id,  null, $profiles);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -433,15 +464,13 @@ class HinaSdk
      * @param array $profiles
      * @return bool
      */
-    public function userAppend($account_id, $is_login_id, $profiles = array())
+    public function userAppend($account_id,  $profiles = array())
     {
         try {
-            if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
-            }
             return $this->_track_event('user_append', null, $account_id, null, $profiles);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -453,12 +482,9 @@ class HinaSdk
      * @param array $profile_keys
      * @return bool
      */
-    public function userUnset($account_id, $is_login_id, $profile_keys = array())
+    public function userUnset($account_id,  $profile_keys = array())
     {
         try {
-            if (!is_bool($is_login_id)) {
-                throw new HinaSdkIllegalDataException("is_login_id must be a bool.");
-            }
             if ($profile_keys != null && array_key_exists(0, $profile_keys)) {
                 $new_profile_keys = array();
                 foreach ($profile_keys as $key) {
@@ -469,6 +495,7 @@ class HinaSdk
             return $this->_track_event('user_unset', null, $account_id,  null, $profile_keys);
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
+            return false;
         }
     }
 
@@ -478,7 +505,7 @@ class HinaSdk
      *
      * @param array $super_properties
      */
-    public function registerSuperProperties(array $super_properties)
+    public function registerCommonProperties(array $super_properties)
     {
         $this->_super_properties = array_merge($this->_super_properties, $super_properties);
     }
@@ -753,18 +780,16 @@ class BatchConsumer extends AbstractConsumer
      * @param string $url_prefix 服务器的 URL 地址。
      * @param int $max_size 批量发送的阈值。
      * @param int $request_timeout 请求服务器的超时时间，单位毫秒。
-     * @param boolean $response_info 发送数据请求是否返回详情 默认 false。
      * @param string $filename 发送数据请求的返回状态及数据落盘记录，必须同时 $response_info 为 ture 时，才会记录。
      */
-    public function __construct($url_prefix, $max_size = 200, $request_timeout = 2000, $response_info = false, $filename = false)
+    public function __construct($url_prefix, $max_size = 200, $request_timeout = 2000,  $filename = false)
     {
         $this->_buffers = array();
         $this->_max_size = $max_size;
         $this->_url_prefix = $url_prefix;
         $this->_request_timeout = $request_timeout;
-        $this->_response_info = $response_info;
         try {
-            if ($filename !== false && $this->_response_info !== false) {
+            if ($filename !== false ) {
                 $this->file_handler = fopen($filename, 'a+');
             }
         } catch (\Exception $e) {
@@ -784,20 +809,31 @@ class BatchConsumer extends AbstractConsumer
         if (count($this->_buffers) >= $this->_max_size) {
             return $this->flush();
         }
-        // data into cache buffers，back some log
-        if ($this->_response_info) {
-            $result = array(
-                "ret_content" => "data into cache buffers",
-                "ret_origin_data" => "",
-                "ret_code" => 900,
-            );
-            if ($this->file_handler !== null) {
-                // need to write log
-                fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
-            }
-            return $result;
+        $result = array(
+            "ret_content" => "data into cache buffers",
+            "ret_origin_data" => "",
+            "ret_code" => 900,
+        );
+        if ($this->file_handler !== null) {
+            // need to write log
+            fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
         }
-        return true;
+        return $result;
+    }
+    /**
+     * 发送HTTP请求的时候，设置当前时间
+     * @return void
+     */
+    protected function set_current_time(){
+        $newJsonArray=[];
+        foreach ($this->_buffers as $msg) {
+            $dataArray = json_decode($msg, true);
+            if(is_array($dataArray)) {
+                $dataArray['time'] = time();
+                $newJsonArray[] = json_encode($dataArray);
+            }
+        }
+        return $newJsonArray;
     }
 
     /**
@@ -809,6 +845,7 @@ class BatchConsumer extends AbstractConsumer
         if (empty($this->_buffers)) {
             $ret = false;
         } else {
+            $new_buffer=$this->set_current_time();
             $ret = $this->_do_request(array(
                 "data_list" => $this->_encode_msg_list($this->_buffers),
                 "gzip" => 1
@@ -820,11 +857,13 @@ class BatchConsumer extends AbstractConsumer
         return $ret;
     }
 
+
+
     /**
      * 发送数据包给远程服务器。
      *
      * @param array $data
-     * @return bool 请求是否成功
+     * @return array 响应数据
      */
     protected function _do_request($data, $origin_data)
     {
@@ -857,31 +896,20 @@ class BatchConsumer extends AbstractConsumer
 
         $ret = curl_exec($ch);
 
-        // judge back detail response
-        // if ($this->_response_info) {
-        if (true) {
-            $result = array(
-                "ret_content" => $ret,
-                "ret_origin_data" => $origin_data,
-                "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE),
-            );
-            if ($this->file_handler !== null) {
-                // need to write log
-                fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
-            }
-            curl_close($ch);
-            log_message('print',$ret,"响应数据：ret");
-            log_message('print',$result,"响应数据：result");
+        $result = array(
+            "ret_content" => $ret,
+            "ret_origin_data" => $origin_data,
+            "ret_code" => curl_getinfo($ch, CURLINFO_HTTP_CODE),
+        );
+        if ($this->file_handler !== null) {
+            // need to write log
+            fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
+        }
+        curl_close($ch);
+        log_message('print',$ret,"响应数据：ret");
+        log_message('print',$result,"响应数据：result");
 
-            return $result;
-        }
-        if (false === $ret) {
-            curl_close($ch);
-            return false;
-        } else {
-            curl_close($ch);
-            return true;
-        }
+        return $result;
     }
 
     /**
