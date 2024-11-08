@@ -393,6 +393,7 @@ class HinaSdk
                 throw new HinaSdkIllegalDataException("the max length of [original_id] is 255");
             }
             $this->_track_event('track_signup', 'H_SignUp', $account_id, $original_id, $all_properties);
+            $this->flush();
 
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
@@ -411,7 +412,8 @@ class HinaSdk
     public function userSet($account_id, $profiles = array())
     {
         try {
-            return $this->_track_event('user_set', null, $account_id, null, $profiles);
+            $this->_track_event('user_set', null, $account_id, null, $profiles);
+            $this->flush();
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
             return false;
@@ -429,7 +431,8 @@ class HinaSdk
     public function userSetOnce($account_id, $profiles = array())
     {
         try {
-            return $this->_track_event('user_setOnce', null, $account_id, null, $profiles);
+            $this->_track_event('user_setOnce', null, $account_id, null, $profiles);
+            $this->flush();
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
             return false;
@@ -447,7 +450,8 @@ class HinaSdk
     public function userAdd($account_id, $profiles = array())
     {
         try {
-            return $this->_track_event('user_add', null, $account_id, null, $profiles);
+            $this->_track_event('user_add', null, $account_id, null, $profiles);
+            $this->flush();
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
             return false;
@@ -465,7 +469,8 @@ class HinaSdk
     public function userAppend($account_id, $profiles = array())
     {
         try {
-            return $this->_track_event('user_append', null, $account_id, null, $profiles);
+            $this->_track_event('user_append', null, $account_id, null, $profiles);
+            $this->flush();
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
             return false;
@@ -490,7 +495,8 @@ class HinaSdk
                 }
                 $profile_keys = $new_profile_keys;
             }
-            return $this->_track_event('user_unset', null, $account_id, null, $profile_keys);
+            $this->_track_event('user_unset', null, $account_id, null, $profile_keys);
+            $this->flush();
         } catch (Exception $e) {
             echo '<br>' . $e . '<br>';
             return false;
