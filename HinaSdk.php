@@ -1,26 +1,19 @@
 <?php
 
-define('HINA_SDK_VERSION', '1.0.0');
-define('HINA_SDK_LOG_SWITCH', false);
+define('HINA_SDK_VERSION', '2.0.0');
 
-// 日志开关
-if (HINA_SDK_LOG_SWITCH == true) {
-    echo "HinaSdk日志开关已开启\n";
-}
+
 
 // 日志函数
-function log_message($type, $message, $annotation)
+function log_message($type, $message, $annotation,$switch)
 {
 
-    if (HINA_SDK_LOG_SWITCH == false) {
-        return;
-    }
-
+    if(!$switch) return;
     if (strcmp($type, 'echo') == 0) {
         echo "\n===========$annotation=============\n";
         echo $message . PHP_EOL;
         echo "\n==========================================\n";
-    } else if (strcmp($type, 'print') == 0) {
+    } elseif (strcmp($type, 'print') == 0) {
         echo "\n===========$annotation=============\n";
         print_r($message);
         echo "\n==========================================\n";
@@ -780,6 +773,7 @@ class BatchConsumer extends AbstractConsumer
     private $_url_prefix;
     private $_request_timeout;
     private $file_handler;
+    private $log_switch;
 
     /**
      * @param string $url_prefix 服务器的 URL 地址。
@@ -787,12 +781,13 @@ class BatchConsumer extends AbstractConsumer
      * @param int $request_timeout 请求服务器的超时时间，单位毫秒。
      * @param string $filename 发送数据请求的返回状态及数据落盘记录，必须同时 $response_info 为 ture 时，才会记录。
      */
-    public function __construct($url_prefix, $max_size = 200, $request_timeout = 2000, $filename = false)
+    public function __construct($url_prefix, $max_size = 200, $log_switch = false, $request_timeout = 2000, $filename = false)
     {
         $this->_buffers = array();
         $this->_max_size = $max_size;
         $this->_url_prefix = $url_prefix;
         $this->_request_timeout = $request_timeout;
+        $this->log_switch = $log_switch;
         try {
             if ($filename !== false) {
                 $this->file_handler = fopen($filename, 'a+');
@@ -878,10 +873,10 @@ class BatchConsumer extends AbstractConsumer
             $params[] = $key . '=' . urlencode($value);
         }
 
-        log_message('print', $origin_data, "发送的原始json");
-        log_message('print', $data, "发送的data");
-        log_message('print', $this->_url_prefix, "发送的url");
-        log_message('print', implode('&', $params), "发送的body");
+        log_message('print', $origin_data, "发送的原始json", $this->log_switch);
+        log_message('print', $data, "发送的data",$this->log_switch);
+        log_message('print', $this->_url_prefix, "发送的url",$this->log_switch);
+        log_message('print', implode('&', $params), "发送的body",$this->log_switch);
 
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
@@ -912,8 +907,8 @@ class BatchConsumer extends AbstractConsumer
             fwrite($this->file_handler, stripslashes(json_encode($result)) . "\n");
         }
         curl_close($ch);
-        log_message('print', $ret, "响应数据：ret");
-        log_message('print', $result, "响应数据：result");
+        log_message('print', $ret, "响应数据：ret",$this->log_switch);
+        log_message('print', $result, "响应数据：result",$this->log_switch);
 
         return $result;
     }
