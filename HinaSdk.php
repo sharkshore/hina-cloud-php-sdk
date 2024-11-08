@@ -1,6 +1,6 @@
 <?php
 
-define('HINA_SDK_VERSION', '1.0.0');
+define('HINA_SDK_VERSION', '1.1.1');
 define('HINA_SDK_LOG_SWITCH', false);
 
 // 日志开关
