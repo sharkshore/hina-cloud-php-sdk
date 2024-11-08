@@ -98,9 +98,9 @@ class HinaSdk
      * @param mixed $url
      * @return HinaSdk
      */
-    public static function initWithBatch($url, $max_size = 200, $request_timeout = 2000, $filename = false)
+    public static function initWithBatch($url, $max_size = 200, $log_switch = false,$request_timeout = 2000, $filename = false)
     {
-        $consumer = new BatchConsumer($url, $max_size, $request_timeout, $filename);
+        $consumer = new BatchConsumer($url, $max_size, $log_switch,$request_timeout, $filename);
         return new self($consumer);
     }
 
@@ -163,7 +163,7 @@ class HinaSdk
      */
     private function _assert_properties($properties = array())
     {
-        $name_pattern = "/^((?!^account_id$|^original_id$|^time$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
+        $name_pattern = "/^((?!^account_id$|^original_id$|^properties$|^id$|^first_id$|^second_id$|^users$|^events$|^event$|^user_id$|^date$|^datetime$)[a-zA-Z_$][a-zA-Z\\d_$]{0,99})$/i";
 
         if (!$properties) {
             return;
